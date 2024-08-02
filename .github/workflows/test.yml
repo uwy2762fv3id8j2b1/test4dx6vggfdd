@@ -2,27 +2,79 @@ name: test
 
 on:
   schedule:
-    - cron: '50 18 * * *'
+    - cron: '0 4 * * *'
   workflow_dispatch:
 
 permissions:
-    contents: read
-    actions: write
+  contents: read
+  actions: write
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
     timeout-minutes: 300
 
+    env:
+      https_proxy: ${{ secrets.HTTPS_PROXY }}
+      http_proxy: ${{ secrets.HTTP_PROXY }}
+      socks_proxy: ${{ secrets.SOCKS5_PROXY }}
+      no_proxy: localhost,127.0.0.1,::1
+      preferred_proxy: ${{ secrets.PREFERRED_PROXY }}
+      
     steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v3
-      with:
-        python-version: "3.11"
-   
-    - name: app
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.11"
+      
+      - name: Configure Docker daemon proxy
+        run: |
+          sudo mkdir -p /etc/systemd/system/docker.service.d
+          echo '[Service]' | sudo tee /etc/systemd/system/docker.service.d/proxy.conf
+          echo 'Environment="HTTP_PROXY=${{ secrets.HTTP_PROXY }}"' | sudo tee -a /etc/systemd/system/docker.service.d/proxy.conf
+          echo 'Environment="HTTPS_PROXY=${{ secrets.HTTPS_PROXY }}"' | sudo tee -a /etc/systemd/system/docker.service.d/proxy.conf
+          echo 'Environment="SOCKS5_PROXY=${{ secrets.SOCKS5_PROXY }}"' | sudo tee -a /etc/systemd/system/docker.service.d/proxy.conf
+          sudo systemctl daemon-reload
+          sudo systemctl restart docker
+      
+      - name: Check and use preferred proxy
+        run: |
+          function check_proxy {
+            local proxy_type=$1
+            local proxy_value=$2
+            if [ -n "$proxy_value" ]; then
+              if curl -s --proxy $proxy_value https://www.google.com -o /dev/null; then
+                echo "$proxy_type proxy is working"
+                echo "Using $proxy_type proxy"
+                curl -s --proxy $proxy_value https://ipinfo.io | jq
+                export PROXY=$proxy_value
+                export PROXY_TYPE=$proxy_type
+                return 0
+              else
+                echo "$proxy_type proxy failed"
+                return 1
+              fi
+            fi
+            return 1
+          }
+
+          if [ "$preferred_proxy" == "http" ]; then
+            check_proxy "http" $http_proxy || check_proxy "https" $https_proxy || check_proxy "socks5" $socks_proxy
+          elif [ "$preferred_proxy" == "https" ]; then
+            check_proxy "https" $https_proxy || check_proxy "http" $http_proxy || check_proxy "socks5" $socks_proxy
+          elif [ "$preferred_proxy" == "socks5" ]; then
+            check_proxy "socks5" $socks_proxy || check_proxy "http" $http_proxy || check_proxy "https" $https_proxy
+          else
+            check_proxy "http" $http_proxy || check_proxy "https" $https_proxy || check_proxy "socks5" $socks_proxy
+          fi
+
+          if [ -z "$PROXY" ]; then
+            echo "No working proxy found"
+            exit 1
+          fi
+
+      - name: app
       run: |
         chmod +x entrypoint.sh
 
