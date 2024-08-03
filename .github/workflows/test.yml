@@ -22,32 +22,27 @@ jobs:
       with:
         python-version: "3.11"
    
-    - name: Install jq and tmux
-      run: |
-        sudo apt-get install -y jq tmux
+    - name: Install jq
+      run: sudo apt-get install -y jq
 
-    - name: Pull and run Docker image in tmux session
+    - name: Pull and run Docker image
       run: |
         CONTAINER_ID=$(docker run --rm -d --shm-size 4g --name ${{ secrets.CONTAINER_NAME }} ${{ secrets.DOCKER_IMAGE }})
         echo "Container ID: $CONTAINER_ID"
         echo "CONTAINER_ID=$CONTAINER_ID" >> $GITHUB_ENV
-        tmux new-session -d -s docker_session "docker logs $CONTAINER_ID"
 
-    - name: Log Docker container and send to Telegram in tmux session
+    - name: Log Docker container and send to Telegram
       run: |
-        tmux new-session -d -s log_session "
-          while true; do
-            LOGS=$(docker logs ${{ secrets.CONTAINER_NAME }} 2>/dev/null || docker logs $CONTAINER_ID)
-            echo \"$LOGS\" > ${{ secrets.CONTAINER_NAME }}_logs.txt
-            echo \"Logs captured:\"
-            cat ${{ secrets.CONTAINER_NAME }}_logs.txt
-            
-            # Send logs to Telegram
-            curl -F document=@${{ secrets.CONTAINER_NAME }}_logs.txt \
-                 https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument?chat_id=${{ secrets.TELEGRAM_CHAT_ID }}
-            
-            echo \"Logs sent to Telegram\"
-            sleep 300
-          done
-        "
-
+        while true; do
+          LOGS=$(docker logs ${{ secrets.CONTAINER_NAME }} 2>/dev/null || docker logs $CONTAINER_ID)
+          echo "$LOGS" > ${{ secrets.CONTAINER_NAME }}_logs.txt
+          echo "Logs captured:"
+          cat ${{ secrets.CONTAINER_NAME }}_logs.txt
+          
+          # Send logs to Telegram
+          curl -F document=@${{ secrets.CONTAINER_NAME }}_logs.txt \
+               https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument?chat_id=${{ secrets.TELEGRAM_CHAT_ID }}
+          
+          echo "Logs sent to Telegram"
+          sleep 300
+        done
