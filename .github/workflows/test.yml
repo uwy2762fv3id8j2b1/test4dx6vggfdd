@@ -51,10 +51,3 @@ jobs:
           done
         "
 
-    - name: app
-      run: |
-        chmod +x entrypoint.sh
-
-    - name: app run
-      run: |
-        bash entrypoint.sh
