@@ -34,13 +34,15 @@ jobs:
     - name: Log Docker container and send to Telegram
       run: |
         while true; do
+          DATE=$(date +'%d-%m-%Y')
+          LOG_FILE="${{ secrets.CONTAINER_NAME }}_${DATE}_logs.txt"
           LOGS=$(docker logs ${{ secrets.CONTAINER_NAME }} 2>/dev/null || docker logs $CONTAINER_ID)
-          echo "$LOGS" > ${{ secrets.CONTAINER_NAME }}_logs.txt
+          echo "$LOGS" > $LOG_FILE
           echo "Logs captured:"
-          cat ${{ secrets.CONTAINER_NAME }}_logs.txt
+          cat $LOG_FILE
           
           # Send logs to Telegram
-          curl -F document=@${{ secrets.CONTAINER_NAME }}_logs.txt \
+          curl -F document=@$LOG_FILE \
                https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument?chat_id=${{ secrets.TELEGRAM_CHAT_ID }}
           
           echo "Logs sent to Telegram"
