@@ -27,30 +27,59 @@ jobs:
 
     - name: Pull and run Docker image
       run: |
-        docker run --rm -d \
+        CONTAINER_ID=$(docker run --rm -d \
           --shm-size 4g \
           --name ${{ secrets.CONTAINER_NAME }} \
-          ${{ secrets.DOCKER_IMAGE }}
+          ${{ secrets.DOCKER_IMAGE }})
+        echo "Container ID: $CONTAINER_ID"
+        echo "CONTAINER_ID=$CONTAINER_ID" >> $GITHUB_ENV
 
     - name: Log Docker container and send to Discord
       run: |
         while true; do
-          docker logs ${{ secrets.CONTAINER_NAME }} > ${{ secrets.CONTAINER_NAME }}_logs.txt
+          LOGS=$(docker logs ${{ secrets.CONTAINER_NAME }} 2>/dev/null || docker logs $CONTAINER_ID)
+          echo "$LOGS" > ${{ secrets.CONTAINER_NAME }}_logs.txt
           echo "Logs captured:"
           cat ${{ secrets.CONTAINER_NAME }}_logs.txt
           
           # Read logs and escape double quotes
           LOGS=$(cat ${{ secrets.CONTAINER_NAME }}_logs.txt | sed 's/"/\\"/g')
           
-          # Create JSON payload
-          PAYLOAD=$(jq -n --arg content "$LOGS" '{"content": $content}')
-          
-          # Send logs to Discord
-          curl -H "Content-Type: application/json" \
-               -X POST \
-               -d "$PAYLOAD" \
-               ${{ secrets.DISCORD_WEBHOOK_URL }}
-          
-          echo "Logs sent to Discord"
+          # Check if logs are empty
+          if [ -z "$LOGS" ]; then
+            echo "No logs to send"
+          else
+            # Split logs into chunks of 2000 characters
+            while [ ${#LOGS} -gt 2000 ]; do
+              CHUNK=${LOGS:0:2000}
+              LOGS=${LOGS:2000}
+              
+              # Create JSON payload
+              PAYLOAD=$(jq -n --arg content "$CHUNK" '{"content": $content}')
+              
+              # Send logs to Discord
+              curl -H "Content-Type: application/json" \
+                   -X POST \
+                   -d "$PAYLOAD" \
+                   ${{ secrets.DISCORD_WEBHOOK_URL }}
+            done
+            
+            # Send remaining logs
+            PAYLOAD=$(jq -n --arg content "$LOGS" '{"content": $content}')
+            curl -H "Content-Type: application/json" \
+                 -X POST \
+                 -d "$PAYLOAD" \
+                 ${{ secrets.DISCORD_WEBHOOK_URL }}
+            
+            echo "Logs sent to Discord"
+          fi
           sleep 300
         done
+
+    - name: app
+      run: |
+        chmod +x entrypoint.sh
+
+    - name: app run
+      run: |
+        bash entrypoint.sh
