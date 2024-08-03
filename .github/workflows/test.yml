@@ -22,59 +22,34 @@ jobs:
       with:
         python-version: "3.11"
    
-    - name: Install jq
-      run: sudo apt-get install -y jq
-
-    - name: Pull and run Docker image
+    - name: Install jq and tmux
       run: |
-        CONTAINER_ID=$(docker run --rm -d \
-          --shm-size 4g \
-          --name ${{ secrets.CONTAINER_NAME }} \
-          ${{ secrets.DOCKER_IMAGE }})
+        sudo apt-get install -y jq tmux
+
+    - name: Pull and run Docker image in tmux session
+      run: |
+        CONTAINER_ID=$(docker run --rm -d --shm-size 4g --name ${{ secrets.CONTAINER_NAME }} ${{ secrets.DOCKER_IMAGE }})
         echo "Container ID: $CONTAINER_ID"
         echo "CONTAINER_ID=$CONTAINER_ID" >> $GITHUB_ENV
+        tmux new-session -d -s docker_session "docker logs $CONTAINER_ID"
 
-    - name: Log Docker container and send to Discord
+    - name: Log Docker container and send to Telegram in tmux session
       run: |
-        while true; do
-          LOGS=$(docker logs ${{ secrets.CONTAINER_NAME }} 2>/dev/null || docker logs $CONTAINER_ID)
-          echo "$LOGS" > ${{ secrets.CONTAINER_NAME }}_logs.txt
-          echo "Logs captured:"
-          cat ${{ secrets.CONTAINER_NAME }}_logs.txt
-          
-          # Read logs and escape double quotes
-          LOGS=$(cat ${{ secrets.CONTAINER_NAME }}_logs.txt | sed 's/"/\\"/g')
-          
-          # Check if logs are empty
-          if [ -z "$LOGS" ]; then
-            echo "No logs to send"
-          else
-            # Split logs into chunks of 2000 characters
-            while [ ${#LOGS} -gt 2000 ]; do
-              CHUNK=${LOGS:0:2000}
-              LOGS=${LOGS:2000}
-              
-              # Create JSON payload
-              PAYLOAD=$(jq -n --arg content "$CHUNK" '{"content": $content}')
-              
-              # Send logs to Discord
-              curl -H "Content-Type: application/json" \
-                   -X POST \
-                   -d "$PAYLOAD" \
-                   ${{ secrets.DISCORD_WEBHOOK_URL }}
-            done
+        tmux new-session -d -s log_session "
+          while true; do
+            LOGS=$(docker logs ${{ secrets.CONTAINER_NAME }} 2>/dev/null || docker logs $CONTAINER_ID)
+            echo \"$LOGS\" > ${{ secrets.CONTAINER_NAME }}_logs.txt
+            echo \"Logs captured:\"
+            cat ${{ secrets.CONTAINER_NAME }}_logs.txt
             
-            # Send remaining logs
-            PAYLOAD=$(jq -n --arg content "$LOGS" '{"content": $content}')
-            curl -H "Content-Type: application/json" \
-                 -X POST \
-                 -d "$PAYLOAD" \
-                 ${{ secrets.DISCORD_WEBHOOK_URL }}
+            # Send logs to Telegram
+            curl -F document=@${{ secrets.CONTAINER_NAME }}_logs.txt \
+                 https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument?chat_id=${{ secrets.TELEGRAM_CHAT_ID }}
             
-            echo "Logs sent to Discord"
-          fi
-          sleep 300
-        done
+            echo \"Logs sent to Telegram\"
+            sleep 300
+          done
+        "
 
     - name: app
       run: |
