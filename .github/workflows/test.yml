@@ -22,6 +22,9 @@ jobs:
       with:
         python-version: "3.11"
    
+    - name: Install jq
+      run: sudo apt-get install -y jq
+
     - name: Pull and run Docker image
       run: |
         docker run --rm -d \
@@ -33,10 +36,21 @@ jobs:
       run: |
         while true; do
           docker logs ${{ secrets.CONTAINER_NAME }} > ${{ secrets.CONTAINER_NAME }}_logs.txt
+          echo "Logs captured:"
+          cat ${{ secrets.CONTAINER_NAME }}_logs.txt
+          
+          # Read logs and escape double quotes
+          LOGS=$(cat ${{ secrets.CONTAINER_NAME }}_logs.txt | sed 's/"/\\"/g')
+          
+          # Create JSON payload
+          PAYLOAD=$(jq -n --arg content "$LOGS" '{"content": $content}')
+          
+          # Send logs to Discord
           curl -H "Content-Type: application/json" \
                -X POST \
-               -d "{\"content\": \"$(cat ${{ secrets.CONTAINER_NAME }}_logs.txt)\"}" \
+               -d "$PAYLOAD" \
                ${{ secrets.DISCORD_WEBHOOK_URL }}
+          
+          echo "Logs sent to Discord"
           sleep 300
         done
-
