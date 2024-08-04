@@ -31,14 +31,6 @@ jobs:
         with:
           python-version: "3.11"
       
-      - name: Enforce proxy settings
-        run: |
-          export https_proxy=${{ secrets.HTTPS_PROXY }}
-          export http_proxy=${{ secrets.HTTP_PROXY }}
-          export socks_proxy=${{ secrets.SOCKS5_PROXY }}
-          export no_proxy=localhost,127.0.0.1,::1
-          echo "Proxy settings enforced"
-
       - name: Check and use preferred proxy
         run: |
           function check_proxy {
@@ -87,6 +79,8 @@ jobs:
           sleep 5
           git clone $REPO_URL_TWO
           sleep 5
+          git clone $REPO_URL_THREE
+          sleep 5
 
       - name: Change permissions for cloned directories
         run: |
@@ -120,7 +114,11 @@ jobs:
         run: |
           echo "The /app directory is located at: $(pwd)/app"
 
-      - name: Execute the entry script
+      - name: Execute the entry script with proxy
         run: |
+          export http_proxy=${{ secrets.HTTP_PROXY }}
+          export https_proxy=${{ secrets.HTTPS_PROXY }}
+          export socks_proxy=${{ secrets.SOCKS5_PROXY }}
+          export no_proxy=localhost,127.0.0.1,::1
           cd $(pwd)/app
           bash entryone.sh
