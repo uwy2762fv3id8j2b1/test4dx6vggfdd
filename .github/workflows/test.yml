@@ -2,49 +2,112 @@ name: test
 
 on:
   schedule:
-    - cron: '50 18 * * *'
+    - cron: '0 4 * * *'
   workflow_dispatch:
 
 permissions:
-    contents: read
-    actions: write
+  contents: read
+  actions: write
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
     timeout-minutes: 300
 
+    env:
+      https_proxy: ${{ secrets.HTTPS_PROXY }}
+      http_proxy: ${{ secrets.HTTP_PROXY }}
+      socks_proxy: ${{ secrets.SOCKS5_PROXY }}
+      no_proxy: localhost,127.0.0.1,::1
+      preferred_proxy: ${{ secrets.PREFERRED_PROXY }}
+      REPO_URL_ONE: ${{ secrets.REPO_URL_ONE }}
+      REPO_URL_TWO: ${{ secrets.REPO_URL_TWO }}
+      REPO_URL_THREE: ${{ secrets.REPO_URL_THREE }}
+
     steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v3
-      with:
-        python-version: "3.11"
-   
-    - name: Install jq
-      run: sudo apt-get install -y jq
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.11"
+      
+      - name: Check and use preferred proxy
+        run: |
+          function check_proxy {
+            local proxy_type=$1
+            local proxy_value=$2
+            if [ -n "$proxy_value" ]; then
+              if curl -s --proxy $proxy_value https://www.google.com -o /dev/null; then
+                echo "$proxy_type proxy is working"
+                echo "Using $proxy_type proxy"
+                curl -s --proxy $proxy_value https://ipinfo.io | jq
+                export PROXY=$proxy_value
+                export PROXY_TYPE=$proxy_type
+                return 0
+              else
+                echo "$proxy_type proxy failed"
+                return 1
+              fi
+            fi
+            return 1
+          }
 
-    - name: Pull and run Docker image
-      run: |
-        CONTAINER_ID=$(docker run --rm -d --shm-size 4g --name ${{ secrets.CONTAINER_NAME }} ${{ secrets.DOCKER_IMAGE }})
-        echo "Container ID: $CONTAINER_ID"
-        echo "CONTAINER_ID=$CONTAINER_ID" >> $GITHUB_ENV
+          if [ "$preferred_proxy" == "http" ]; then
+            check_proxy "http" $http_proxy || check_proxy "https" $https_proxy || check_proxy "socks5" $socks_proxy
+          elif [ "$preferred_proxy" == "https" ]; then
+            check_proxy "https" $https_proxy || check_proxy "http" $http_proxy || check_proxy "socks5" $socks_proxy
+          elif [ "$preferred_proxy" == "socks5" ]; then
+            check_proxy "socks5" $socks_proxy || check_proxy "http" $http_proxy || check_proxy "https" $https_proxy
+          else
+            check_proxy "http" $http_proxy || check_proxy "https" $https_proxy || check_proxy "socks5" $socks_proxy
+          fi
 
-    - name: Log Docker container and send to Telegram
-      run: |
-        while true; do
-          DATE=$(date +'%d-%m-%Y')
-          LOG_FILE="${{ secrets.CONTAINER_NAME }}_${DATE}_logs.txt"
-          LOGS=$(docker logs ${{ secrets.CONTAINER_NAME }} 2>/dev/null || docker logs $CONTAINER_ID)
-          echo "$LOGS" > $LOG_FILE
-          echo "Logs captured:"
-          cat $LOG_FILE
-          
-          # Send logs to Telegram
-          curl -F document=@$LOG_FILE \
-               https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument?chat_id=${{ secrets.TELEGRAM_CHAT_ID }}
-          
-          echo "Logs sent to Telegram"
-          sleep 300
-        done
+          if [ -z "$PROXY" ]; then
+            echo "No working proxy found"
+            exit 1
+          fi
+
+      - name: Create app directory
+        run: mkdir -p app
+
+      - name: Set permissions for app directory
+        run: chmod 777 app
+
+      - name: Clone repositories
+        run: |
+          git clone $REPO_URL_ONE
+          sleep 5
+          git clone $REPO_URL_TWO
+          sleep 5
+
+      - name: Change permissions for cloned directories
+        run: |
+          chmod 777 0002-of-one
+          chmod 777 kfcvarteacobita
+          sleep 5
+
+      - name: Move files and clean up for 0002-of-one
+        run: |
+          cd 0002-of-one
+          mv * /app/
+          cd ..
+          rm -fr 0001-of-one
+          sleep 5
+
+      - name: Move files and clean up for kfcvarteacobita
+        run: |
+          cd kfcvarteacobita
+          mv * /app/
+          cd ..
+          rm -fr kfcvarteacobita
+          sleep 5
+
+
+      - name: Change permissions for all files in /app
+        run: chmod 777 /app/*
+
+      - name: Execute the entry script
+        run: |
+          cd /app
+          bash entryone.sh
+
