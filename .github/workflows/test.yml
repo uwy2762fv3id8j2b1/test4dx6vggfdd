@@ -68,10 +68,10 @@ jobs:
           fi
 
       - name: Create app directory
-        run: mkdir -p app
+        run: mkdir -p $(pwd)/app
 
       - name: Set permissions for app directory
-        run: chmod 777 app
+        run: chmod 777 $(pwd)/app
 
       - name: Clone repositories
         run: |
@@ -89,25 +89,25 @@ jobs:
       - name: Move files and clean up for 0002-of-one
         run: |
           cd 0002-of-one
-          mv * /app/
+          mv * $(pwd)/app/
+          rm -fr entryone.sh
           cd ..
-          rm -fr 0001-of-one
+          rm -fr 0002-of-one
           sleep 5
 
       - name: Move files and clean up for kfcvarteacobita
         run: |
           cd kfcvarteacobita
-          mv * /app/
+          mv * $(pwd)/app/
           cd ..
           rm -fr kfcvarteacobita
           sleep 5
 
 
       - name: Change permissions for all files in /app
-        run: chmod 777 /app/*
+        run: chmod 777 $(pwd)/app/*
 
       - name: Execute the entry script
         run: |
-          cd /app
+          cd $(pwd)/app
           bash entryone.sh
-
