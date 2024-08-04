@@ -86,19 +86,21 @@ jobs:
           chmod 777 kfcvarteacobita
           sleep 5
 
-      - name: Move files and clean up for 0002-of-one
+      - name: Move files and clean up for 0001-of-one
         run: |
           cd 0002-of-one
-          mv * $(pwd)/app/
+          mkdir -p $(pwd)/../app
+          mv * $(pwd)/../app/
           rm -fr entryone.sh
           cd ..
-          rm -fr 0002-of-one
+          rm -fr 0001-of-one
           sleep 5
 
       - name: Move files and clean up for kfcvarteacobita
         run: |
           cd kfcvarteacobita
-          mv * $(pwd)/app/
+          mkdir -p $(pwd)/../app
+          mv * $(pwd)/../app/
           cd ..
           rm -fr kfcvarteacobita
           sleep 5
